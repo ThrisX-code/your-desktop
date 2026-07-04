@@ -104,8 +104,9 @@ export function SprintNotes({ task, user }: SprintNotesProps) {
       return;
     }
 
-    if (text.length > 500) {
-      setError(`Note text cannot exceed 500 characters. (Currently: ${text.length})`);
+    const wordCount = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+    if (wordCount > 500) {
+      setError(`Note text cannot exceed 500 words. (Currently: ${wordCount})`);
       return;
     }
 
@@ -235,11 +236,11 @@ export function SprintNotes({ task, user }: SprintNotesProps) {
             <textarea
               value={text}
               onChange={e => setText(e.target.value)}
-              placeholder="Add your notes here (max 500 characters)..."
+              placeholder="Add your notes here (max 500 words)..."
               className="w-full h-24 bg-slate-950 border border-slate-800 rounded p-2 text-sm focus:ring-1 focus:ring-indigo-500 outline-none resize-none"
             />
             <span className="text-[10px] text-slate-500 self-end">
-              {text.length} / 500 characters
+              {text.trim() === '' ? 0 : text.trim().split(/\s+/).length} / 500 words
             </span>
           </div>
 
