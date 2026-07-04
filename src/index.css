@@ -31,7 +31,7 @@ html {
   @apply bg-[#0f172a] border border-[#1e293b] rounded-2xl p-5 flex flex-col;
 }
 
-.category-tag-coding { background: #312e81; color: #a5b4fc; }
+.category-tag-coding { background: #3c399b; color: #a5b4fc; }
 .category-tag-study { background: #1e3a8a; color: #93c5fd; }
 .category-tag-hardware { background: #581c87; color: #d8b4fe; }
 .category-tag-general { background: #1e293b; color: #94a3b8; }
