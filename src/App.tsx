@@ -3,75 +3,169 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Task } from './types';
 import { TaskForm } from './components/TaskForm';
 import { Timeline } from './components/Timeline';
 import { PromptOrchestrator } from './components/PromptOrchestrator';
 import { Metrics } from './components/Metrics';
+import { SprintNotes } from './components/SprintNotes';
 import { playAlarm } from './lib/audio';
+import { Auth } from './components/Auth';
+import { auth, db, collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc } from './lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
+  const [user, setUser] = useState<any>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   const [activeTimerId, setActiveTimerId] = useState<string | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [signOutState, setSignOutState] = useState<'idle' | 'first' | 'second'>('idle');
+  const workerRef = useRef<Worker | null>(null);
 
   useEffect(() => {
-    let interval: number;
-    if (isTimerRunning && remainingSeconds > 0) {
-      interval = window.setInterval(() => {
-        setRemainingSeconds(prev => {
-          if (prev <= 1) {
-            setIsTimerRunning(false);
-            playAlarm();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribeAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setTasks([]);
+      return;
     }
-    return () => clearInterval(interval);
-  }, [isTimerRunning, remainingSeconds]);
+    const q = query(
+      collection(db, 'tasks'),
+      where('userId', '==', user.uid)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedTasks = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Task[];
+      fetchedTasks.sort((a, b) => b.createdAt - a.createdAt);
+      setTasks(fetchedTasks);
+    }, (error) => {
+      console.error("Tasks snapshot error:", error);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  useEffect(() => {
+    workerRef.current = new Worker(new URL('./timerWorker.ts', import.meta.url), { type: 'module' });
+    
+    workerRef.current.onmessage = (e) => {
+      if (e.data.type === 'tick') {
+        setRemainingSeconds(e.data.seconds);
+      } else if (e.data.type === 'done') {
+        setIsTimerRunning(false);
+        setActiveTimerId(null);
+        setRemainingSeconds(0);
+        playAlarm();
+        
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Time Over!', {
+            body: 'Your active sprint has finished.',
+          });
+        }
+      }
+    };
+
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.terminate();
+      }
+    };
+  }, []);
 
   const handleToggleTimer = (taskId: string, durationMin: number) => {
+    if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+      Notification.requestPermission();
+    }
+    
     if (activeTimerId === taskId) {
-      setIsTimerRunning(!isTimerRunning);
+      if (isTimerRunning) {
+        setIsTimerRunning(false);
+        workerRef.current?.postMessage({ action: 'stop' });
+      } else {
+        setIsTimerRunning(true);
+        workerRef.current?.postMessage({ action: 'start', seconds: remainingSeconds });
+      }
     } else {
       setActiveTimerId(taskId);
-      setRemainingSeconds(durationMin * 60);
+      const newSeconds = durationMin * 60;
+      setRemainingSeconds(newSeconds);
       setIsTimerRunning(true);
+      workerRef.current?.postMessage({ action: 'start', seconds: newSeconds });
     }
   };
 
-  const handleAddTask = (newTaskData: Omit<Task, 'id' | 'completed' | 'createdAt'>) => {
-    const newTask: Task = {
-      ...newTaskData,
-      id: crypto.randomUUID(),
-      completed: false,
-      createdAt: Date.now(),
-    };
-    setTasks(prev => [newTask, ...prev]);
-  };
-
-  const handleToggleComplete = (id: string) => {
-    setTasks(prev => prev.map(task => 
-      task.id === id ? { ...task, completed: !task.completed } : task
-    ));
-  };
-
-  const handleDelete = (id: string) => {
-    setTasks(prev => prev.filter(task => task.id !== id));
-    if (selectedTaskId === id) {
-      setSelectedTaskId(null);
-    }
-    if (activeTimerId === id) {
-      setActiveTimerId(null);
-      setIsTimerRunning(false);
+  const handleAddTask = async (newTaskData: Omit<Task, 'id' | 'completed' | 'createdAt'>) => {
+    if (!user) return;
+    try {
+      await addDoc(collection(db, 'tasks'), {
+        ...newTaskData,
+        userId: user.uid,
+        completed: false,
+        createdAt: Date.now(), // Use standard timestamp for ease of use here
+      });
+    } catch (error) {
+      console.error("Error adding task:", error);
     }
   };
+
+  const handleToggleComplete = async (id: string) => {
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    try {
+      await updateDoc(doc(db, 'tasks', id), {
+        completed: !task.completed
+      });
+    } catch (error) {
+      console.error("Error updating task:", error);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'tasks', id));
+      if (selectedTaskId === id) {
+        setSelectedTaskId(null);
+      }
+      if (activeTimerId === id) {
+        setActiveTimerId(null);
+        setIsTimerRunning(false);
+      }
+    } catch (error) {
+      console.error("Error deleting task:", error);
+    }
+  };
+
+  const handleSignOut = () => {
+    setSignOutState('first');
+  };
+
+  const confirmSignOut = () => {
+    if (signOutState === 'first') {
+      setSignOutState('second');
+    } else if (signOutState === 'second') {
+      auth.signOut();
+      setSignOutState('idle');
+    }
+  };
+
+  const cancelSignOut = () => {
+    setSignOutState('idle');
+  };
+
+  if (!user) {
+    return <Auth />;
+  }
 
   const selectedTask = tasks.find(t => t.id === selectedTaskId) || null;
 
@@ -91,9 +185,17 @@ export default function App() {
           </h1>
           <p className="text-xs text-slate-500 uppercase tracking-widest font-bold">System Status: Optimal // Core v4.2</p>
         </div>
-        <div className="text-right">
+        <div className="flex flex-col items-end text-right">
           <p className="text-lg font-mono text-indigo-400">{formattedDate}</p>
-          <p className="text-xs text-slate-500">SESSION_ID: 8x-992-ALPHA</p>
+          <div className="flex items-center gap-4 mt-1">
+            <p className="text-xs text-slate-500 truncate max-w-[150px]">{user.email}</p>
+            <button
+              onClick={handleSignOut}
+              className="text-[10px] uppercase tracking-widest text-red-400 hover:text-red-300 font-bold"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
       </header>
 
@@ -133,6 +235,47 @@ export default function App() {
           <Metrics tasks={tasks} />
         </div>
       </div>
+
+      {/* Sprint Notes Section */}
+      <AnimatePresence mode="wait">
+        {selectedTask && (
+          <motion.div
+            key={selectedTask.id}
+            initial={{ opacity: 0, height: 0, y: 20 }}
+            animate={{ opacity: 1, height: 'auto', y: 0 }}
+            exit={{ opacity: 0, height: 0, y: 20 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-hidden"
+          >
+            <SprintNotes task={selectedTask} user={user} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Sign Out Confirmation Modal */}
+      {signOutState !== 'idle' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-6 max-w-sm w-full shadow-xl">
+            <h3 className="text-lg font-bold text-white mb-4 text-center">
+              Are you sure you're leaving{signOutState === 'second' ? ' (Are you really sure?)' : ''}
+            </h3>
+            <div className="flex justify-end gap-3 mt-6">
+              <button 
+                onClick={cancelSignOut}
+                className="px-4 py-2 text-sm text-slate-300 hover:text-white transition-colors"
+              >
+                No, stay
+              </button>
+              <button 
+                onClick={confirmSignOut}
+                className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+              >
+                Yes, I'm sure
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

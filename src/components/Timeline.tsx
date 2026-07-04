@@ -59,6 +59,11 @@ export function Timeline({ tasks, selectedTaskId, activeTimerId, remainingSecond
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${catClass}`}>
                     {task.category}
                   </span>
+                  {task.subCategory && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-slate-400 border border-slate-700">
+                      {task.subCategory}
+                    </span>
+                  )}
                   <h3 className={`font-semibold text-sm ${task.completed ? 'line-through text-slate-500' : 'text-slate-200'}`}>
                     {task.name}
                   </h3>

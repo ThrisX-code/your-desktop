@@ -4,6 +4,7 @@ export interface Task {
   id: string;
   name: string;
   category: Category;
+  subCategory?: string;
   duration: number;
   context: string;
   completed: boolean;

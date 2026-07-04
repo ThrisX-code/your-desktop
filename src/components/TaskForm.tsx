@@ -8,8 +8,19 @@ interface TaskFormProps {
 export function TaskForm({ onAdd }: TaskFormProps) {
   const [name, setName] = useState('');
   const [category, setCategory] = useState<Category>('Coding');
+  const [subCategory, setSubCategory] = useState<string>('JavaScript');
   const [duration, setDuration] = useState<number | ''>('');
   const [context, setContext] = useState('');
+
+  const STUDY_SUBJECTS = ['Mathematics', 'Biology', 'History', 'Tamil', 'Geography', 'Physics', 'Computer', 'Chemistry', 'English'];
+  const CODING_LANGUAGES = ['Java', 'JavaScript', 'Python', 'TypeScript', 'C++', 'C#', 'Go', 'Rust', 'Other'];
+
+  const handleCategoryChange = (newCategory: Category) => {
+    setCategory(newCategory);
+    if (newCategory === 'Study') setSubCategory(STUDY_SUBJECTS[0]);
+    else if (newCategory === 'Coding') setSubCategory(CODING_LANGUAGES[1]); // JavaScript
+    else setSubCategory('');
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,12 +29,14 @@ export function TaskForm({ onAdd }: TaskFormProps) {
     onAdd({
       name,
       category,
+      subCategory: subCategory || undefined,
       duration: Number(duration),
       context,
     });
     
     setName('');
     setCategory('Coding');
+    setSubCategory('JavaScript');
     setDuration('');
     setContext('');
   };
@@ -41,7 +54,7 @@ export function TaskForm({ onAdd }: TaskFormProps) {
             value={name}
             onChange={e => setName(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
-            placeholder="Refactor API layer..."
+            placeholder="Home Work Class Work Exam"
             required
           />
         </div>
@@ -50,7 +63,7 @@ export function TaskForm({ onAdd }: TaskFormProps) {
           <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Category</label>
           <select 
             value={category}
-            onChange={e => setCategory(e.target.value as Category)}
+            onChange={e => handleCategoryChange(e.target.value as Category)}
             className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
           >
             <option value="Coding">Coding</option>
@@ -59,6 +72,23 @@ export function TaskForm({ onAdd }: TaskFormProps) {
             <option value="General">General</option>
           </select>
         </div>
+
+        {(category === 'Study' || category === 'Coding') && (
+          <div>
+            <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">
+              {category === 'Study' ? 'Subject' : 'Language / Topic'}
+            </label>
+            <select 
+              value={subCategory}
+              onChange={e => setSubCategory(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
+            >
+              {(category === 'Study' ? STUDY_SUBJECTS : CODING_LANGUAGES).map(subject => (
+                <option key={subject} value={subject}>{subject}</option>
+              ))}
+            </select>
+          </div>
+        )}
         
         <div>
           <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Duration (min)</label>
@@ -79,7 +109,7 @@ export function TaskForm({ onAdd }: TaskFormProps) {
             value={context}
             onChange={e => setContext(e.target.value)}
             className="w-full h-24 bg-slate-950 border border-slate-800 rounded p-2 text-sm focus:ring-1 focus:ring-indigo-500 outline-none resize-none"
-            placeholder="Facing circular dependency in Auth service..."
+            placeholder="Give the topic you should cover"
             required
           />
         </div>

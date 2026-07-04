@@ -1,0 +1,36 @@
+{
+  "collections": [
+    {
+      "name": "tasks",
+      "fields": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "duration": { "type": "number", "optional": true },
+        "createdAt": { "type": "timestamp" }
+      },
+      "permissions": {
+        "read": "request.auth != null && request.auth.uid == resource.data.userId",
+        "create": "request.auth != null && request.resource.data.userId == request.auth.uid",
+        "update": "request.auth != null && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid",
+        "delete": "request.auth != null && resource.data.userId == request.auth.uid"
+      }
+    },
+    {
+      "name": "timeline_events",
+      "fields": {
+        "userId": { "type": "string" },
+        "taskId": { "type": "string" },
+        "action": { "type": "string" },
+        "timestamp": { "type": "timestamp" },
+        "details": { "type": "string", "optional": true }
+      },
+      "permissions": {
+        "read": "request.auth != null && request.auth.uid == resource.data.userId",
+        "create": "request.auth != null && request.resource.data.userId == request.auth.uid",
+        "update": "false",
+        "delete": "request.auth != null && resource.data.userId == request.auth.uid"
+      }
+    }
+  ]
+}
